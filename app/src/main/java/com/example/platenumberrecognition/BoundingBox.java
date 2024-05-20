@@ -6,6 +6,8 @@ public class BoundingBox {
     private float x2;
     private float y2;
     private float confidence;
+    private String label;
+
 
     public BoundingBox(float x1, float y1, float x2, float y2, float confidence) {
         this.x1 = x1;
@@ -34,4 +36,13 @@ public class BoundingBox {
     public float getConfidence() {
         return confidence;
     }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
 }

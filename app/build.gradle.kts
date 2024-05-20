@@ -50,4 +50,5 @@ dependencies {
     implementation(libs.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
+    implementation ("com.google.android.gms:play-services-vision:20.1.3")
 }

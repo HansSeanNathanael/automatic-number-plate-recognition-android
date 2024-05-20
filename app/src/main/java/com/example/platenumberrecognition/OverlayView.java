@@ -64,7 +64,7 @@ public class OverlayView extends View {
             int y2 = (int) (box.getY2() * (float)this.getHeight());
 
             canvas.drawRect(x1, y1, x2, y2, this.boxPaint);
-            String label = "Plat Nomor";
+            String label = box.getLabel();
 
             textBackgroundPaint.getTextBounds(label, 0, label.length(), this.bounds);
             int textWidth = this.bounds.width();

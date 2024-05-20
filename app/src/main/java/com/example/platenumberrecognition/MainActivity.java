@@ -25,6 +25,10 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.android.gms.vision.text.TextRecognizer;
+import com.google.android.gms.vision.Frame;
+import android.util.SparseArray;
+import com.google.android.gms.vision.text.TextBlock;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -55,24 +59,27 @@ public class MainActivity extends AppCompatActivity {
         this.requestPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
             String message = isGranted ? "Camera permission granted" : "Camera permission rejected";
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+            if (isGranted) {
+                startCamera();
+            } else {
+                // Tindakan yang sesuai jika izin kamera ditolak
+            }
         });
 
         this.requestPermissionLauncher.launch(Manifest.permission.CAMERA);
 
-        this.previewViewCamera = (PreviewView) this.findViewById(R.id.previewViewCamera);
-        this.overlayView = (OverlayView) this.findViewById(R.id.overlayView);
+        this.previewViewCamera = findViewById(R.id.previewViewCamera);
+        this.overlayView = findViewById(R.id.overlayView);
 
         try {
             this.plateDetectionHelper = new PlateDetectionHelper(this);
             this.cameraExecutor = Executors.newSingleThreadExecutor();
-            this.startCamera();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             Toast.makeText(this, "Failed loading model", Toast.LENGTH_SHORT).show();
+            // Tindakan yang sesuai jika gagal memuat model
         }
 
     }
-
 
     private void startCamera() {
         ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(this);
@@ -88,61 +95,82 @@ public class MainActivity extends AppCompatActivity {
                         .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                         .build();
                 imageAnalysis.setAnalyzer(this.cameraExecutor, new ImageAnalysis.Analyzer() {
-                    @Nullable
-                    @Override
-                    public Size getDefaultTargetResolution() {
-                        return ImageAnalysis.Analyzer.super.getDefaultTargetResolution();
-                    }
-
-                    @Override
-                    public int getTargetCoordinateSystem() {
-                        return ImageAnalysis.Analyzer.super.getTargetCoordinateSystem();
-                    }
-
-                    @Override
-                    public void updateTransform(@Nullable Matrix matrix) {
-                        ImageAnalysis.Analyzer.super.updateTransform(matrix);
-                    }
-
                     @Override
                     public void analyze(@NonNull ImageProxy imageProxy) {
+                        try {
+                            Bitmap bitmap = Bitmap.createBitmap(imageProxy.getWidth(), imageProxy.getHeight(), Bitmap.Config.ARGB_8888);
+                            bitmap.copyPixelsFromBuffer(imageProxy.getPlanes()[0].getBuffer());
 
-                        Bitmap bitmap = Bitmap.createBitmap(imageProxy.getWidth(), imageProxy.getHeight(), Bitmap.Config.ARGB_8888 );
-                        bitmap.copyPixelsFromBuffer(imageProxy.getPlanes()[0].getBuffer());
+                            int rotation = imageProxy.getImageInfo().getRotationDegrees();
+                            imageProxy.close();
 
-                        int rotation = imageProxy.getImageInfo().getRotationDegrees();
-                        imageProxy.close();
+                            Matrix matrix = new Matrix();
+                            matrix.postRotate(rotation);
 
-                        Matrix matrix = new Matrix();
-                        matrix.postRotate(rotation);
+                            Bitmap rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+                            bitmap.recycle();
 
-                        Bitmap rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
-                        bitmap.recycle();
+                            // Perform OCR
+                            List<BoundingBox> objects = MainActivity.this.plateDetectionHelper.process(rotatedBitmap);
+                            String detectedText = performOCR(rotatedBitmap);
+                            rotatedBitmap.recycle();
 
-                        final List<BoundingBox> objects = MainActivity.this.plateDetectionHelper.process(rotatedBitmap);
-                        rotatedBitmap.recycle();
+                            // Add detected text to bounding box label
+                            for (BoundingBox object : objects) {
+                                object.setLabel(detectedText);
+                            }
 
-                        MainActivity.this.overlayView.setBoundingBox(objects);
+                            MainActivity.this.overlayView.setBoundingBox(objects);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
                     }
                 });
 
                 cameraProvider.unbindAll();
                 cameraProvider.bindToLifecycle(
-                    this,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
-                    imageAnalysis,
-                    preview
+                        MainActivity.this,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        imageAnalysis,
+                        preview
                 );
 
-            } catch (Exception ignored) {
-                Toast.makeText(this, "Gagal memunculkan kamera.", Toast.LENGTH_SHORT).show();
+            } catch (Exception e) {
+                e.printStackTrace();
+                Toast.makeText(MainActivity.this, "Failed to start camera.", Toast.LENGTH_SHORT).show();
+                // Tindakan yang sesuai jika gagal memulai kamera
             }
         }, ContextCompat.getMainExecutor(this));
+    }
+
+    private String performOCR(Bitmap bitmap) {
+        // Inisialisasi recognizer teks
+        TextRecognizer textRecognizer = new TextRecognizer.Builder(getApplicationContext()).build();
+
+        // Membuat frame dari bitmap
+        Frame frame = new Frame.Builder().setBitmap(bitmap).build();
+
+        // Mendapatkan hasil OCR dari frame
+        StringBuilder stringBuilder = new StringBuilder();
+        SparseArray<TextBlock> textBlocks = textRecognizer.detect(frame);
+        for (int i = 0; i < textBlocks.size(); i++) {
+            TextBlock textBlock = textBlocks.valueAt(i);
+            stringBuilder.append(textBlock.getValue());
+            stringBuilder.append("\n");
+        }
+
+        // Membebaskan resource recognizer teks
+        textRecognizer.release();
+
+        // Mengembalikan teks yang terdeteksi
+        return stringBuilder.toString();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        this.cameraExecutor.shutdown();
+        if (cameraExecutor != null) {
+            cameraExecutor.shutdown();
+        }
     }
 }
