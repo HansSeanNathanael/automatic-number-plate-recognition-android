@@ -57,74 +57,6 @@ public class PlateDetectionHelper {
         }
     }
 
-//    public List<BoundingBox> process(Bitmap bitmap) {
-//        int width = bitmap.getWidth();
-//        int height = bitmap.getHeight();
-//        int maximum = Math.max(width, height);
-//
-//        float ratioChange = ((float)IMAGE_SIZE) / maximum;
-//
-//        int newWidth = Math.min(width * IMAGE_SIZE / maximum, 640);
-//        int newHeight = Math.min(height * IMAGE_SIZE / maximum, 640);
-//
-//        Bitmap scaledBitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, false);
-//
-//        Bitmap paddedBitmap;
-//        if (newWidth != IMAGE_SIZE || newHeight != IMAGE_SIZE) {
-//            paddedBitmap = Bitmap.createBitmap(IMAGE_SIZE, IMAGE_SIZE, Bitmap.Config.ARGB_8888);
-//            Canvas canvas = new Canvas(paddedBitmap);
-//            canvas.drawColor(Color.BLUE); // Mengisi dengan warna hitam (byte 0)
-//            canvas.drawBitmap(scaledBitmap, 0, 0, null);
-//            scaledBitmap.recycle();
-//        }
-//        else {
-//            paddedBitmap = scaledBitmap;
-//        }
-//
-//        ImageProcessor imageProcessor = new ImageProcessor.Builder()
-//                .add(new NormalizeOp(0f, 255f))
-//                .add(new CastOp(DataType.FLOAT32))
-//                .build();
-//
-//        TensorImage tensorImage = new TensorImage(DataType.FLOAT32);
-//        tensorImage.load(paddedBitmap);
-//        TensorImage processedImage = imageProcessor.process(tensorImage);
-//
-//        TensorBuffer output = TensorBuffer.createFixedSize(new int[]{1 , 18, 8400}, DataType.FLOAT32);
-//        interpreter.run(processedImage.getBuffer(), output.getBuffer());
-//
-//        float[] floatArray = output.getFloatArray();
-//
-//        ArrayList<BoundingBox> result = new ArrayList<>();
-//        for (int i = 0; i < 8400; i++) {
-//            float confidence = floatArray[this.offsetEachIndex[4] + i];
-//            for (int j = 1; j < 14; j++) {
-//                if (floatArray[this.offsetEachIndex[4 + j] + i] > confidence) {
-//                    confidence = floatArray[this.offsetEachIndex[4 + j] + i];
-//                }
-//            }
-//
-//            if (confidence > CONFIDENCE_THRESHOLD) {
-//                float cx = floatArray[this.offsetEachIndex[0] + i];
-//                float cy = floatArray[this.offsetEachIndex[1] + i];
-//                float w = floatArray[this.offsetEachIndex[2] + i];
-//                float h = floatArray[this.offsetEachIndex[3] + i];
-//
-//                float x1 = Math.max(cx - (w/2F), 0f);
-//                float y1 = Math.max(cy - (h/2F), 0f);
-//                float x2 = Math.min(cx + (w/2F), 1f);
-//                float y2 = Math.min(cy + (h/2F), 1f);
-//
-//                result.add(new BoundingBox(x1, y1, x2, y2, confidence));
-//            }
-//        }
-//
-//        paddedBitmap.recycle();
-//
-//        return result;
-////        return this.NMS(result);
-//    }
-
     public List<BoundingBox> process(Bitmap bitmap) {
 
         Bitmap scaledBitmap = Bitmap.createScaledBitmap(bitmap, 640, 640, false);
@@ -170,26 +102,18 @@ public class PlateDetectionHelper {
 
         scaledBitmap.recycle();
 
-//        return result;
         return this.NMS(result);
     }
 
     private List<BoundingBox> NMS(List<BoundingBox> boxes) {
         ArrayList<BoundingBox> result = new ArrayList<>();
-//
-//        boxes.sort(new Comparator<BoundingBox>() {
-//            @Override
-//            public int compare(BoundingBox o1, BoundingBox o2) {
-//                return o1.getConfidence() > o2.getConfidence() ? 1 : -1;
-//            }
-//        });
 
         for (BoundingBox box : boxes) {
             boolean addNewBox = true;
 
             for (int i = 0; i < result.size(); i++) {
                 BoundingBox otherBox = result.get(i);
-                if (this.intersectionOverUnion(box, otherBox) > CONFIDENCE_THRESHOLD) {
+                if (this.intersectionOverUnion(box, otherBox) > IOU_THRESHOLD) {
                     if (otherBox.getConfidence() < box.getConfidence()) {
                         result.set(i, box);
                     }

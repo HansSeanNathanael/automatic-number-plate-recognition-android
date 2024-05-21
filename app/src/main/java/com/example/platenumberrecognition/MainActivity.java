@@ -4,14 +4,13 @@ import android.Manifest;
 import android.graphics.Bitmap;
 import android.graphics.Matrix;
 import android.os.Bundle;
-import android.util.Size;
+import android.util.Log;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
@@ -40,6 +39,7 @@ public class MainActivity extends AppCompatActivity {
     private OverlayView overlayView;
 
     private PlateDetectionHelper plateDetectionHelper;
+    private TextRecognizer textRecognizer;
 
     private ActivityResultLauncher<String> requestPermissionLauncher;
 
@@ -70,6 +70,8 @@ public class MainActivity extends AppCompatActivity {
 
         this.previewViewCamera = findViewById(R.id.previewViewCamera);
         this.overlayView = findViewById(R.id.overlayView);
+
+        this.textRecognizer = new TextRecognizer.Builder(this.getApplicationContext()).build();
 
         try {
             this.plateDetectionHelper = new PlateDetectionHelper(this);
@@ -112,18 +114,27 @@ public class MainActivity extends AppCompatActivity {
 
                             // Perform OCR
                             List<BoundingBox> objects = MainActivity.this.plateDetectionHelper.process(rotatedBitmap);
-                            String detectedText = performOCR(rotatedBitmap);
-                            rotatedBitmap.recycle();
 
                             // Add detected text to bounding box label
                             for (BoundingBox object : objects) {
+                                int x1 = (int) Math.min(object.getX1() * (float)rotatedBitmap.getWidth(), rotatedBitmap.getWidth());
+                                int y1 = (int) Math.min(object.getY1() * (float)rotatedBitmap.getHeight(), rotatedBitmap.getHeight());
+                                int x2 = (int) Math.min(object.getX2() * (float)rotatedBitmap.getWidth(), rotatedBitmap.getWidth());
+                                int y2 = (int) Math.min(object.getY2() * (float)rotatedBitmap.getHeight(), rotatedBitmap.getHeight());
+
+                                // Memotong bagian dari bitmap menggunakan createBitmap
+                                Bitmap croppedBitmap = Bitmap.createBitmap(rotatedBitmap, x1, y1, x2 - x1, y2 - y1);
+                                String detectedText = performOCR(croppedBitmap);
+                                croppedBitmap.recycle();
+//
+                                detectedText = detectedText.replace("\n", " ");
                                 object.setLabel(detectedText);
                             }
 
+                            rotatedBitmap.recycle();
+
                             MainActivity.this.overlayView.setBoundingBox(objects);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
+                        } catch (Exception ignored) {}
                     }
                 });
 
@@ -144,23 +155,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String performOCR(Bitmap bitmap) {
-        // Inisialisasi recognizer teks
-        TextRecognizer textRecognizer = new TextRecognizer.Builder(getApplicationContext()).build();
-
         // Membuat frame dari bitmap
         Frame frame = new Frame.Builder().setBitmap(bitmap).build();
 
         // Mendapatkan hasil OCR dari frame
         StringBuilder stringBuilder = new StringBuilder();
-        SparseArray<TextBlock> textBlocks = textRecognizer.detect(frame);
+        SparseArray<TextBlock> textBlocks = MainActivity.this.textRecognizer.detect(frame);
         for (int i = 0; i < textBlocks.size(); i++) {
             TextBlock textBlock = textBlocks.valueAt(i);
             stringBuilder.append(textBlock.getValue());
             stringBuilder.append("\n");
         }
-
-        // Membebaskan resource recognizer teks
-        textRecognizer.release();
 
         // Mengembalikan teks yang terdeteksi
         return stringBuilder.toString();
